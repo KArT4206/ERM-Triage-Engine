@@ -2,7 +2,6 @@
 
 > This repository documents the project (description, method, results, screenshots). The source code lives in a private repository, `ERM-Triage-Engine-code`.
 
-**Live demo:** _deployment in progress_
 **Project site:** [https://kart4206.github.io/ERM-Triage-Engine/](https://kart4206.github.io/ERM-Triage-Engine/)
 
 Detects epiretinal membrane (ERM) on retinal OCT B-scans and decides, scan by scan, whether the result can be reported automatically or should go to a retinal specialist. Two lightweight CNNs run Monte Carlo dropout, and the spread of their 30 stochastic predictions is the uncertainty that drives the referral.
@@ -47,7 +46,7 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 The validation-calibrated threshold referred 12 of 95 scans. All 5 errors were among them, and the other 83 scans were classified correctly. The variance separates wrong from right predictions with an AUROC of 0.936. On ERM scans, Grad-CAM puts 1.37 times more attribution on retinal tissue than its share of the image.
 
-Full tables and figures: [docs/RESULTS.md](docs/RESULTS.md).
+Full tables and figures: [docs/RESULTS.md](docs/RESULTS.md). The complete write-up is in [docs/REPORT.md](docs/REPORT.md).
 
 ## Screenshots
 
@@ -58,7 +57,7 @@ Full tables and figures: [docs/RESULTS.md](docs/RESULTS.md).
 
 ## Tech stack
 
-Python, PyTorch and torchvision, scikit-learn, Flask, Chart.js. The live demo runs the same Flask app in a Docker container on a Hugging Face Space (CPU).
+Python, PyTorch and torchvision, scikit-learn, Flask, Chart.js. The app runs locally with `python app.py`.
 
 ## Limitations
 

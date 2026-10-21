@@ -2,7 +2,7 @@
 
 ## Scope
 
-This policy covers the ERM Triage Engine web application: the Flask server, its routes and the dashboard. It does not cover Hugging Face's hosting infrastructure or the OCTDL dataset.
+This policy covers the ERM Triage Engine web application: the Flask server, its routes and the dashboard. It does not cover the OCTDL dataset.
 
 ## Data handling
 

@@ -1,0 +1,411 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ERM Triage Engine · Report</title><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><style>:root{--bg:#f6f7f9;--s:#fff;--b:#e2e5ea;--t:#111827;--t2:#374151;--a:#1d4ed8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1117;--s:#151b23;--b:#2a323d;--t:#e6e9ee;--t2:#c3cad3;--a:#6b9bff}}
+:root[data-theme="dark"]{--bg:#0d1117;--s:#151b23;--b:#2a323d;--t:#e6e9ee;--t2:#c3cad3;--a:#6b9bff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--t);font:16px/1.65 Inter,system-ui,sans-serif}
+main{max-width:860px;margin:0 auto;padding:40px 16px 80px}h1{font-size:clamp(26px,5vw,34px);line-height:1.2;letter-spacing:-.02em}
+h2{margin-top:44px;padding-top:12px;border-top:1px solid var(--b)}h3{margin-top:28px}p,li{color:var(--t2)}a{color:var(--a)}
+img{max-width:100%;border:1px solid var(--b);border-radius:8px;background:#fff}
+table{display:block;overflow-x:auto;border-collapse:collapse;margin:14px 0;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{border:1px solid var(--b);padding:6px 10px;text-align:left;white-space:nowrap}th{background:var(--s)}
+pre{background:var(--s);border:1px solid var(--b);border-radius:8px;padding:12px;overflow-x:auto;font-size:13px}code{font-size:.92em}
+.back{display:inline-block;margin-bottom:12px}</style></head><body><main><a class="back" href="./">← Project overview</a><h1>ERM Triage Engine: project report</h1>
+<p><strong>Uncertainty-aware detection and triage of epiretinal membrane on OCT B-scans using a Monte Carlo dropout ensemble of lightweight CNNs</strong></p>
+<p>Karthik B, Sai Sathya Krishna A R, Adharsh Ramakrishnan, and Dr. Swaminathan A (corresponding author)
+School of Computer Science and Engineering, Vellore Institute of Technology, Chennai</p>
+<p>Research software. Not a medical device.</p>
+<h2>Contents</h2>
+<ol>
+<li>Summary</li>
+<li>Clinical background</li>
+<li>Problem and objectives</li>
+<li>Data</li>
+<li>Method</li>
+<li>Evaluation protocol</li>
+<li>Results</li>
+<li>The application</li>
+<li>Reproducing the results</li>
+<li>Limitations</li>
+<li>Future work</li>
+<li>References</li>
+</ol>
+<h2>1. Summary</h2>
+<p>Epiretinal membrane (ERM) is a common disorder of the vitreoretinal interface that wrinkles the inner retina and can blur and distort central vision. It is diagnosed on optical coherence tomography (OCT). This project builds a screening engine that detects ERM on single OCT B-scans and, for each scan, decides whether the result can be reported automatically or should be referred to a retinal specialist.</p>
+<p>Two ImageNet-pretrained backbones, ResNet-34 and MobileNetV3-Large, are fine-tuned on the public OCTDL dataset. At inference both keep dropout active and run 15 stochastic passes each. The mean of the 30 pooled probabilities is the prediction and their variance is the uncertainty. A variance threshold is calibrated on a validation split and then applied, unchanged, to a held-out test split of patients the models never saw.</p>
+<p>On that test split (95 scans from 36 patients), the ensemble reached an AUC of 1.000, a balanced accuracy of 0.964 (95% patient-level bootstrap interval [0.926, 0.989]), a sensitivity of 1.000 and a specificity of 0.928. The calibrated referral rule sent 12 scans (12.6%) to a specialist. All 5 misclassified scans were among them, and the remaining 83 scans were all classified correctly. Training takes about 35 seconds on an Apple-silicon laptop.</p>
+<h2>2. Clinical background</h2>
+<p>ERM is a sheet of fibrocellular tissue that grows on the inner surface of the retina at the macula. Most cases are idiopathic and associated with age and posterior vitreous detachment. Secondary ERM follows retinal tears, retinal detachment surgery, uveitis, retinal vascular occlusion or diabetic retinopathy. As the membrane contracts it wrinkles the inner retina and pulls on the fovea, which causes metamorphopsia (distorted vision), blurring and, in advanced cases, reduced visual acuity. Treatment ranges from observation to vitrectomy with membrane peeling, depending on symptoms and the structural stage on OCT.</p>
+<p>On an OCT B-scan, ERM appears as a hyperreflective line on, or slightly separated from, the internal limiting membrane. Typical associated signs are surface wrinkling, flattening or loss of the foveal depression, increased central retinal thickness and, later, ectopic inner foveal layers and disorganised inner retina. Early membranes are thin and easy to overlook; advanced membranes are obvious.</p>
+<p><img alt="Example scans" src="figures/fig_examples.png" /></p>
+<p><em>Example test scans: (a), (b) normal maculae with a preserved foveal pit; (c), (d) ERM with a hyperreflective membrane, wrinkling and loss of the foveal contour.</em></p>
+<h2>3. Problem and objectives</h2>
+<p>OCT volumes are acquired far faster than specialists can grade them, so automated screening is attractive. Two problems make many published classifiers hard to trust in practice:</p>
+<ul>
+<li>They are often evaluated on random image-level splits. Several B-scans of one eye are nearly identical, so the same patient appears in both training and test data and the reported accuracy is inflated.</li>
+<li>They return a label for every scan, however unsure they are. A screening tool needs to decide clear cases and pass ambiguous ones to a clinician.</li>
+</ul>
+<p>The objectives were therefore to:</p>
+<ol>
+<li>train a light, fast ERM detector on public data;</li>
+<li>estimate per-scan uncertainty and turn it into a referral rule;</li>
+<li>evaluate everything on patients that were never used for training or for choosing thresholds, with confidence intervals;</li>
+<li>show where the model looks, and package it in a usable application with a per-scan report.</li>
+</ol>
+<h2>4. Data</h2>
+<p>OCTDL (Kulyabin et al., <em>Scientific Data</em>, 2024) is a public collection of more than 2,000 OCT B-scans acquired with an Optovue Avanti RTVue XR device, centred on the fovea and labelled by retinal specialists. It is released under CC BY 4.0 and includes patient identifiers. This project uses its normal (NO) and ERM classes: 332 normal scans from 110 patients and 155 ERM scans from 71 patients.</p>
+<p>Patients, not images, were shuffled with a fixed seed (42) within each class and assigned to training, validation and test sets in the proportion 60/20/20. No patient contributes images to more than one set.</p>
+<table>
+<thead>
+<tr>
+<th>Split</th>
+<th>Normal</th>
+<th>ERM</th>
+<th>Total</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Training</td>
+<td>190</td>
+<td>99</td>
+<td>289</td>
+<td>Fitting the networks</td>
+</tr>
+<tr>
+<td>Validation</td>
+<td>73</td>
+<td>30</td>
+<td>103</td>
+<td>Calibrating the referral threshold only</td>
+</tr>
+<tr>
+<td>Test</td>
+<td>69</td>
+<td>26</td>
+<td>95</td>
+<td>Every reported metric</td>
+</tr>
+</tbody>
+</table>
+<p>The test set contains 36 patients, 14 of whom have ERM.</p>
+<h2>5. Method</h2>
+<p><img alt="Pipeline" src="figures/fig_pipeline.png" /></p>
+<h3>5.1 Preprocessing</h3>
+<p>Each scan is converted to grayscale and resized to 224 × 224 pixels. Intensities are clipped to the image's own 1st and 99th percentiles and rescaled to [0, 1]:</p>
+<p>g′ = clip((g − P1) / (P99 − P1), 0, 1)</p>
+<p>This removes brightness and contrast differences between scans. The image is then copied into three channels and standardised with ImageNet statistics. During training only, images are flipped horizontally at random and rotated by up to ±10°.</p>
+<h3>5.2 Backbones</h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>ResNet-34</th>
+<th>MobileNetV3-Large</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Design</td>
+<td>Residual connections</td>
+<td>Depthwise-separable blocks found by architecture search</td>
+</tr>
+<tr>
+<td>Pretraining</td>
+<td>ImageNet</td>
+<td>ImageNet</td>
+</tr>
+<tr>
+<td>Frozen</td>
+<td>First 50% of parameter tensors</td>
+<td>First 50% of parameter tensors</td>
+</tr>
+<tr>
+<td>Head</td>
+<td>Dropout (p = 0.3) → Linear(512, 2)</td>
+<td>Linear → Hardswish → Dropout (p = 0.3) → Linear(1280, 2)</td>
+</tr>
+</tbody>
+</table>
+<p>The two architectures make partly different errors, which is what an ensemble needs. Freezing the early layers keeps generic edge and texture filters and limits over-fitting on a small dataset.</p>
+<h3>5.3 Training</h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Optimiser</td>
+<td>AdamW, learning rate 3 × 10⁻⁴, weight decay 10⁻⁴</td>
+</tr>
+<tr>
+<td>Schedule</td>
+<td>Cosine annealing over all steps</td>
+</tr>
+<tr>
+<td>Loss</td>
+<td>Cross-entropy with label smoothing 0.1</td>
+</tr>
+<tr>
+<td>Class balance</td>
+<td>Weighted random sampler, weight 1 / class count</td>
+</tr>
+<tr>
+<td>Batch size / epochs</td>
+<td>16 / 5</td>
+</tr>
+<tr>
+<td>Hardware / time</td>
+<td>Apple-silicon laptop (PyTorch MPS) / about 35 s</td>
+</tr>
+</tbody>
+</table>
+<h3>5.4 Monte Carlo dropout ensemble</h3>
+<p>At inference, batch normalisation stays in evaluation mode while dropout stays active. Each backbone runs S = 15 passes with independent dropout masks. With p_m^(s)(x) the ERM probability of backbone m on pass s, the 30 pooled passes give</p>
+<ul>
+<li>the predictive mean p̄(x) = (1 / 2S) Σ_m Σ_s p_m^(s)(x), which decides the class at 0.5;</li>
+<li>the epistemic variance u(x) = (1 / 2S) Σ_m Σ_s (p_m^(s)(x) − p̄(x))², which captures both dropout noise within a model and disagreement between the two models;</li>
+<li>a 95% predictive interval from the 2.5th and 97.5th percentiles of the passes.</li>
+</ul>
+<h3>5.5 Triage rule</h3>
+<p>The referral threshold τ is the variance below which the 90% most certain validation scans fall (τ = 0.0219 in the released model). It is fixed after calibration and applied unchanged to the test split. The application refers a scan when any of three checks fails:</p>
+<ol>
+<li>u(x) &gt; τ;</li>
+<li>the two backbones disagree on the class;</li>
+<li>0.35 &lt; p̄(x) &lt; 0.65.</li>
+</ol>
+<p>The quantitative analysis below evaluates the variance rule on its own, because that is the part calibrated on separate data.</p>
+<h3>5.6 Explainability</h3>
+<p>Grad-CAM is computed for the ERM logit of ResNet-34 at its last convolutional stage (layer4). To measure where the model looks, retinal tissue is segmented with Otsu's threshold, and the tissue attention ratio is the share of Grad-CAM mass on tissue divided by the share of the image that tissue covers. A ratio above 1 means attention concentrates on the retina more than its area alone would explain.</p>
+<h2>6. Evaluation protocol</h2>
+<ul>
+<li><strong>Patient-disjoint splits.</strong> No patient appears in more than one split.</li>
+<li><strong>Threshold on validation only.</strong> τ is chosen on the validation split; the test split is touched once, for the final numbers.</li>
+<li><strong>Metrics.</strong> AUC, balanced accuracy, sensitivity, specificity, F1, Matthews correlation coefficient (MCC) and expected calibration error (ECE, 10 bins), with ERM as the positive class.</li>
+<li><strong>Confidence intervals.</strong> 95% intervals from a patient-level bootstrap with 1,000 resamples. Patients, not images, are resampled, because scans of one patient are not independent.</li>
+<li><strong>Reproducibility.</strong> MC-dropout sampling in the analysis is seeded, and every number and figure is generated from saved predictions.</li>
+</ul>
+<h2>7. Results</h2>
+<h3>7.1 Detection</h3>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>AUC</th>
+<th>Balanced accuracy</th>
+<th>Sensitivity</th>
+<th>Specificity</th>
+<th>F1</th>
+<th>MCC</th>
+<th>ECE</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ResNet-34</td>
+<td>0.990</td>
+<td>0.964</td>
+<td>1.000</td>
+<td>0.928</td>
+<td>0.912</td>
+<td>0.882</td>
+<td>0.048</td>
+</tr>
+<tr>
+<td>MobileNetV3-Large</td>
+<td>1.000</td>
+<td>0.957</td>
+<td>1.000</td>
+<td>0.913</td>
+<td>0.897</td>
+<td>0.861</td>
+<td>0.111</td>
+</tr>
+<tr>
+<td>MC-dropout ensemble</td>
+<td>1.000</td>
+<td>0.964</td>
+<td>1.000</td>
+<td>0.928</td>
+<td>0.912</td>
+<td>0.882</td>
+<td>0.117</td>
+</tr>
+</tbody>
+</table>
+<p>95% patient-level bootstrap intervals:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>AUC</th>
+<th>Balanced accuracy</th>
+<th>Sensitivity</th>
+<th>Specificity</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ResNet-34</td>
+<td>[0.971, 1.000]</td>
+<td>[0.925, 0.992]</td>
+<td>[1.000, 1.000]</td>
+<td>[0.857, 0.978]</td>
+</tr>
+<tr>
+<td>MobileNetV3-Large</td>
+<td>[1.000, 1.000]</td>
+<td>[0.922, 0.984]</td>
+<td>[1.000, 1.000]</td>
+<td>[0.840, 0.970]</td>
+</tr>
+<tr>
+<td>MC-dropout ensemble</td>
+<td>[1.000, 1.000]</td>
+<td>[0.926, 0.989]</td>
+<td>[1.000, 1.000]</td>
+<td>[0.851, 0.978]</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="ROC and reliability" src="figures/fig_roc_reliability.png" /></p>
+<p><img alt="Confusion matrices" src="figures/fig_confusion.png" /></p>
+<p>The ensemble found all 26 ERM scans and correctly classified 64 of 69 normal scans. Every ERM scan received a higher ERM probability than every normal scan, so the 5 errors are all false positives near the decision threshold. ResNet-34 alone had the same confusion matrix; MobileNetV3-Large had 6 false positives. The two backbones agreed on 94.7% of test scans. On the validation split the ensemble reached an AUC of 0.992 and a balanced accuracy of 0.933, consistent with the test results.</p>
+<p>The intervals matter more than the point estimates here. The sensitivity interval is stuck at 1.000 because no ERM scan was missed in any resample, which reflects the 14 ERM patients available rather than proving perfect sensitivity. The specificity interval, [0.851, 0.978], is the most realistic picture of the remaining uncertainty. ResNet-34 was the best calibrated model (ECE 0.048); averaging it with the less extreme MobileNetV3-Large raised the ensemble ECE to 0.117, and the reliability diagram shows the ensemble is somewhat under-confident in its middle bins, a known effect of label smoothing and averaging.</p>
+<h3>7.2 Uncertainty and referral</h3>
+<table>
+<thead>
+<tr>
+<th>Coverage</th>
+<th>Auto-reported</th>
+<th>Referred</th>
+<th>Balanced accuracy</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100%</td>
+<td>95</td>
+<td>0</td>
+<td>0.964</td>
+</tr>
+<tr>
+<td>95%</td>
+<td>90</td>
+<td>5</td>
+<td>0.961</td>
+</tr>
+<tr>
+<td>90%</td>
+<td>86</td>
+<td>9</td>
+<td>0.983</td>
+</tr>
+<tr>
+<td>85%</td>
+<td>81</td>
+<td>14</td>
+<td>1.000</td>
+</tr>
+<tr>
+<td>80%</td>
+<td>76</td>
+<td>19</td>
+<td>1.000</td>
+</tr>
+<tr>
+<td>70%</td>
+<td>66</td>
+<td>29</td>
+<td>1.000</td>
+</tr>
+<tr>
+<td>Calibrated τ</td>
+<td>83</td>
+<td>12</td>
+<td>1.000</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="Referral curve and uncertainty" src="figures/fig_selective.png" /></p>
+<p>The validation-calibrated threshold referred 12 of 95 test scans. All 5 errors were among them, and the 83 automatically reported scans (26 ERM, 57 normal) were all correct. The right-hand plot shows why: the misclassified scans sit at intermediate probabilities with high variance, well apart from the correct ones. Mean variance was 0.0291 on misclassified scans and 0.0065 on correct ones, and the variance identified misclassified scans with an AUROC of 0.936.</p>
+<p>The small dip at 95% coverage happens because the very most uncertain scans include a few correctly classified normal scans near the boundary; removing them shifts the class balance before the errors are reached.</p>
+<h3>7.3 Where the model looks</h3>
+<p><img alt="Grad-CAM" src="figures/fig_gradcam.png" /></p>
+<p>For ERM scans, Grad-CAM concentrates on the inner retinal surface: the membrane, the wrinkled inner retina and the distorted foveal contour, which are the features a clinician looks for.</p>
+<table>
+<thead>
+<tr>
+<th>Scans</th>
+<th>Tissue attention ratio</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ERM</td>
+<td>1.37</td>
+</tr>
+<tr>
+<td>Normal</td>
+<td>0.50</td>
+</tr>
+<tr>
+<td>All</td>
+<td>0.74</td>
+</tr>
+</tbody>
+</table>
+<p>On ERM scans the attribution falls on retinal tissue 1.37 times more than tissue's share of the image. On normal scans the ratio is below 1: the map explains the ERM score, a normal scan offers little evidence for it, and the leftover attribution lands on the choroid and the image borders. The most uncertain test scan, a normal eye with p̄ = 0.48, shows diffuse attribution below the retina, which fits its referral.</p>
+<h2>8. The application</h2>
+<p>The project ships a Flask web application with four tabs:</p>
+<ul>
+<li><strong>Analyse:</strong> upload a B-scan or pick one of eight held-out test scans. The page shows the input and the Grad-CAM overlay with an opacity slider, the classification, P(ERM) with its 95% interval, variance against the threshold, entropy and confidence, each backbone's probability and vote, a histogram of the 30 passes, the three triage checks, and the ground truth for sample scans.</li>
+<li><strong>Model performance:</strong> the held-out metrics, ROC, reliability and referral curves and the confusion matrix.</li>
+<li><strong>Methods:</strong> pipeline diagram, dataset, hyperparameters and limitations.</li>
+<li><strong>Paper:</strong> key results, abstract and figures.</li>
+</ul>
+<p>A <strong>Generate report</strong> button produces a one-page A4 report with a report ID, timestamp, image SHA-256 hash, model version, both images, all findings, the triage checks and the validation summary, ready to save as PDF. Uploaded images are processed in memory and never stored.</p>
+<p><img alt="Referred scan" src="screenshots/analyse_referred.png" /></p>
+<p><img alt="Model performance" src="screenshots/performance.png" /></p>
+<h2>9. Reproducing the results</h2>
+<pre><code class="language-bash">python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -r requirements.txt
+python prepare_octdl.py raw_octdl/OCTDL.zip raw_octdl/OCTDL_labels.csv   # patient-level 60/20/20 split
+python erm_engine.py --epochs 5                                           # train, calibrate, test (about 35 s)
+python make_samples.py                                                    # 8 demo scans from the test split
+python paper_analysis.py                                                  # bootstrap CIs, referral analysis, figures
+python app.py                                                             # http://127.0.0.1:5050
+</code></pre>
+<p>OCTDL is available from Mendeley Data (doi 10.17632/sncdhf53xc.4).</p>
+<h2>10. Limitations</h2>
+<ul>
+<li><strong>Small test set.</strong> 95 scans from 36 patients, 14 with ERM. Perfect AUC and sensitivity on this sample do not mean perfect performance in general.</li>
+<li><strong>One device and centre.</strong> All scans come from one Optovue device. Heidelberg Spectralis, Zeiss Cirrus and Topcon scans are untested.</li>
+<li><strong>Binary task.</strong> Only ERM and normal scans were used. In practice ERM coexists with other macular diseases the model has never seen.</li>
+<li><strong>No staging.</strong> The model detects ERM but does not grade its severity.</li>
+<li><strong>One split.</strong> Results come from a single patient-level split; repeated cross-validation would show how much they depend on the split.</li>
+<li><strong>Attribution, not segmentation.</strong> Grad-CAM shows what drives the output; it does not outline the membrane.</li>
+</ul>
+<h2>11. Future work</h2>
+<ul>
+<li>External validation on multi-centre, multi-device data.</li>
+<li>Multi-class OCT diagnosis and ERM staging.</li>
+<li>Retinal foundation models and volume-level aggregation across B-scans.</li>
+<li>A reader study measuring how uncertainty-based referral changes clinician workload and accuracy.</li>
+</ul>
+<h2>12. References</h2>
+<ol>
+<li>M. Kulyabin et al., "OCTDL: Optical coherence tomography dataset for image-based deep learning methods," <em>Sci. Data</em>, vol. 11, 365, 2024.</li>
+<li>A. T. Fung, J. Galvin and T. Tran, "Epiretinal membrane: A review," <em>Clin. Exp. Ophthalmol.</em>, vol. 49, no. 3, pp. 289–308, 2021.</li>
+<li>A. Govetto et al., "Insights into epiretinal membranes: Presence of ectopic inner foveal layers and a new optical coherence tomography staging scheme," <em>Am. J. Ophthalmol.</em>, vol. 175, pp. 99–113, 2017.</li>
+<li>Y. Gal and Z. Ghahramani, "Dropout as a Bayesian approximation: Representing model uncertainty in deep learning," in <em>Proc. ICML</em>, 2016, pp. 1050–1059.</li>
+<li>C. Leibig et al., "Leveraging uncertainty information from deep neural networks for disease detection," <em>Sci. Rep.</em>, vol. 7, 17816, 2017.</li>
+<li>Y. Geifman and R. El-Yaniv, "Selective classification for deep neural networks," in <em>Proc. NeurIPS</em>, 2017, pp. 4878–4887.</li>
+<li>R. R. Selvaraju et al., "Grad-CAM: Visual explanations from deep networks via gradient-based localization," in <em>Proc. ICCV</em>, 2017, pp. 618–626.</li>
+<li>K. He, X. Zhang, S. Ren and J. Sun, "Deep residual learning for image recognition," in <em>Proc. CVPR</em>, 2016, pp. 770–778.</li>
+<li>A. Howard et al., "Searching for MobileNetV3," in <em>Proc. ICCV</em>, 2019, pp. 1314–1324.</li>
+<li>D. S. Kermany et al., "Identifying medical diagnoses and treatable diseases by image-based deep learning," <em>Cell</em>, vol. 172, no. 5, pp. 1122–1131, 2018.</li>
+<li>G. Varoquaux and V. Cheplygina, "Machine learning for medical imaging: Methodological failures and recommendations for the future," <em>npj Digit. Med.</em>, vol. 5, 48, 2022.</li>
+</ol></main></body></html>
