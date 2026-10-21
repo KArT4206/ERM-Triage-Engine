@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ERM Triage Engine</title>
+<meta name="description" content="Uncertainty-aware detection and triage of epiretinal membrane on OCT B-scans.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f7f9;--surface:#fff;--border:#e2e5ea;--text:#111827;--text2:#4b5563;--text3:#8a93a1;--accent:#1d4ed8;--soft:#eef2f8}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0d1117;--surface:#151b23;--border:#2a323d;--text:#e6e9ee;--text2:#a9b1bc;--text3:#6f7a88;--accent:#6b9bff;--soft:#1c232d}}
+:root[data-theme="dark"]{--bg:#0d1117;--surface:#151b23;--border:#2a323d;--text:#e6e9ee;--text2:#a9b1bc;--text3:#6f7a88;--accent:#6b9bff;--soft:#1c232d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 Inter,system-ui,sans-serif}
+main{max-width:1080px;margin:0 auto;padding:40px 16px 64px}h1{font-size:clamp(28px,5vw,40px);letter-spacing:-.02em;margin:0 0 8px;line-height:1.15}
+h2{font-size:20px;margin:48px 0 12px}p{color:var(--text2)}.tag{display:inline-block;font-size:12px;font-weight:600;color:#b54708;background:#fef4e6;border-radius:999px;padding:3px 10px;margin-bottom:16px}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}.btn{text-decoration:none;font-weight:600;padding:10px 16px;border-radius:8px;border:1px solid var(--border);color:var(--text);background:var(--surface)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn.disabled{color:var(--text3)}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}.kpi div{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+.kpi span{display:block;font-size:12px;color:var(--text3)}.kpi b{font-size:22px;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);border-radius:10px;font-variant-numeric:tabular-nums}
+th,td{padding:9px 12px;border-bottom:1px solid var(--border);text-align:left;font-size:14px;white-space:nowrap}th{font-size:12px;color:var(--text3);font-weight:500;text-transform:uppercase}
+tr.hl td{font-weight:600;background:var(--soft)}small{color:var(--text3)}
+img{max-width:100%;border-radius:10px;border:1px solid var(--border);background:#fff}figure{margin:0}figcaption{font-size:13px;color:var(--text3);margin-top:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:18px}footer{border-top:1px solid var(--border);color:var(--text3);font-size:13px;text-align:center;padding:24px 16px}
+ol li,ul li{color:var(--text2);margin:4px 0}
+</style></head><body><main>
+<span class="tag">Research use only</span>
+<h1>ERM Triage Engine</h1>
+<p style="font-size:17px">Epiretinal membrane detection on OCT B-scans that knows when to hand a scan to a specialist. Two lightweight CNNs run Monte Carlo dropout, and the spread of their 30 predictions decides between automatic reporting and referral.</p>
+<p>Karthik B, Sai Sathya Krishna A R, Adharsh Ramakrishnan, Dr. Swaminathan A · VIT Chennai</p>
+<div class="btns"><span class="btn disabled">Live demo coming soon</span><a class="btn" href="https://github.com/KArT4206/ERM-Triage-Engine">Documentation on GitHub</a></div>
+<img src="screenshots/analyse_referred.png" alt="Dashboard analysing a scan that the engine refers to a specialist">
+
+<h2>Held-out test results</h2>
+<p>95 scans from 36 patients that the models never saw. Brackets are 95% patient-level bootstrap intervals.</p>
+<div class="kpi"><div><span>AUC</span><b>1.000</b></div><div><span>Balanced accuracy</span><b>0.964</b></div><div><span>Sensitivity</span><b>1.000</b></div><div><span>Specificity</span><b>0.928</b></div><div><span>Scans referred</span><b>12 / 95</b></div><div><span>Errors caught by referral</span><b>5 / 5</b></div></div>
+<div class="scroll" style="margin-top:14px"><table><thead><tr><th>Model</th><th>AUC</th><th>Balanced accuracy</th><th>Sensitivity</th><th>Specificity</th><th>MCC</th></tr></thead><tbody><tr class=""><td>ResNet-34</td><td>0.990</td><td>0.964 <small>[0.925, 0.992]</small></td><td>1.000</td><td>0.928 <small>[0.857, 0.978]</small></td><td>0.882</td></tr><tr class=""><td>MobileNetV3-Large</td><td>1.000</td><td>0.957 <small>[0.922, 0.984]</small></td><td>1.000</td><td>0.913 <small>[0.840, 0.970]</small></td><td>0.861</td></tr><tr class="hl"><td>MC-dropout ensemble</td><td>1.000</td><td>0.964 <small>[0.926, 0.989]</small></td><td>1.000</td><td>0.928 <small>[0.851, 0.978]</small></td><td>0.882</td></tr></tbody></table></div>
+<p>The referral threshold was set on a separate validation split. On the test split it referred 12 scans, which included all 5 errors, and the remaining 83 were correct.</p>
+
+<h2>How it works</h2>
+<figure><img src="figures/fig_pipeline.png" alt="Pipeline diagram"></figure>
+<ol>
+<li>The scan is converted to grayscale, resized to 224 × 224 and normalised between its 1st and 99th intensity percentiles.</li>
+<li>ResNet-34 and MobileNetV3-Large each run 15 forward passes with dropout switched on.</li>
+<li>The 30 probabilities give a mean (the prediction) and a variance (the uncertainty).</li>
+<li>The scan is reported automatically only if the variance is below the calibrated threshold, both models agree, and the probability is outside 0.35 to 0.65.</li>
+<li>Grad-CAM shows which parts of the scan drove the ERM score.</li>
+</ol>
+
+<h2>Figures</h2>
+<div class="grid">
+<figure><img src="figures/fig_roc_reliability.png" alt="ROC and reliability"><figcaption>ROC curves and calibration</figcaption></figure>
+<figure><img src="figures/fig_selective.png" alt="Referral curve"><figcaption>Referral curve and uncertainty against prediction; red points are errors</figcaption></figure>
+<figure><img src="figures/fig_confusion.png" alt="Confusion matrices"><figcaption>Confusion matrices at threshold 0.5</figcaption></figure>
+<figure><img src="figures/fig_gradcam.png" alt="Grad-CAM"><figcaption>Grad-CAM: attribution sits on the membrane in ERM scans</figcaption></figure>
+</div>
+
+<h2>The app</h2>
+<div class="grid">
+<figure><img src="screenshots/analyse_erm.png" alt="Confident ERM detection"><figcaption>A confident ERM detection, reported automatically</figcaption></figure>
+<figure><img src="screenshots/performance.png" alt="Model performance tab"><figcaption>Held-out metrics and curves</figcaption></figure>
+<figure><img src="screenshots/methods.png" alt="Methods tab"><figcaption>Method, dataset and limitations</figcaption></figure>
+<figure><img src="screenshots/paper.png" alt="Paper tab"><figcaption>Paper summary inside the app</figcaption></figure>
+</div>
+
+<h2>Limitations</h2>
+<ul>
+<li>26 ERM test scans is a small sample; read the perfect AUC together with the intervals.</li>
+<li>One device (Optovue). Other scanners are untested.</li>
+<li>ERM against normal only; other macular diseases were not in the training data.</li>
+</ul>
+<p>Data: OCTDL, Kulyabin et al., Sci. Data 11, 365 (2024), CC BY 4.0.</p>
+</main><footer>ERM Triage Engine · research software, not a medical device</footer></body></html>
